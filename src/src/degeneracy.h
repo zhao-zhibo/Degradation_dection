@@ -18,7 +18,9 @@ inline Eigen::Matrix<T, 3, 3> VectorToSkew(const Eigen::Matrix<T, 3, 1>& vector)
   return skew;
 }
 
-//// @brief 对应论文中的公式15和16，最终返回的是均值和方差
+//// @brief 对应论文中的公式15和16，最终返回的是均值和方差。这两个统计量用于后续计算每个方向的退化概率
+//// @return mean：表示​​点噪声​​（如 LiDAR 测距误差）和法线噪声​​（如表面拟合误差）对 Hessian 的平均影响
+//// @return variance​​：表示噪声在特定方向 u 上的波动强度。
 //// @param normal_covariances：法线的协方差矩阵
 //// @param U：Hessian矩阵的特征向量矩阵，用于投影噪声到各方向。 
 //// @param stdevPoints：点噪声标准差
@@ -78,6 +80,14 @@ auto ComputeNoiseEstimate(const VectorVector3<Q>& points, const VectorVector3<Q>
 }
 
 // ​​对应论文章节​​: III.A (信号与噪声比概率计算)，计算每个方向uk的退化概率p
+// measurement：信号值，表示Hessian矩阵在方向uk上的特征值λ
+
+//// @brief 计算每个特征向量方向uk的退化概率 puk,即在该方向上，信号（Hessian 矩阵的特征值）是否足够强于噪声的概率。
+//// @param measured_information_matrix：Hessian矩阵
+//// @param estimated_noise_mean：噪声均值,即为​点噪声​​（如 LiDAR 测距误差）和法线噪声​​（如表面拟合误差）对 Hessian 的平均影响
+//// @param estimated_noise_variances：噪声方差，表示噪声在特定方向 u 上的波动强度
+//// @param U：Hessian矩阵的特征向量矩阵，6x6的矩阵，每一列表示特征向量
+//// @param snr_factor：信噪比因子
 template <typename T>
 Eigen::Matrix<T, 6, 1> ComputeSignalToNoiseProbabilities(const Eigen::Matrix<T, 6, 6>& measured_information_matrix,
                                                          const Eigen::Matrix<T, 6, 6>& estimated_noise_mean,
@@ -89,15 +99,18 @@ Eigen::Matrix<T, 6, 1> ComputeSignalToNoiseProbabilities(const Eigen::Matrix<T, 
   Vector6 probabilities = Vector6::Zero();
 
   for (size_t k = 0; k < 6; k++) {
+    // ​​步骤 1：计算信号与噪声的统计量​​, 测量值大于10倍的噪声值，表示信号足够强于噪声
     const Vector6 u = U.col(k);
-    const T measurement = (u.transpose() * measured_information_matrix * u).value();
-    const T expected_noise = (u.transpose() * estimated_noise_mean * u).value();
-    const T stdev = std::sqrt(estimated_noise_variances[k]);
-    const T test_point = measurement / (T(1.0) + snr_factor);
+    const T measurement = (u.transpose() * measured_information_matrix * u).value(); // 计算 u^T H u，得到的特征向量u所对应的特征值λ。因为特征向量u满足Hu = λu，也就是信号值，测量值
+    const T expected_noise = (u.transpose() * estimated_noise_mean * u).value(); // 计算 u^T Σ u,对应公式18,estimated_noise_mean对应公式中的Σ，最终得到方向 u 的噪声期望值
+    const T stdev = std::sqrt(estimated_noise_variances[k]); // 噪声标准差​​：表示Hessian矩阵在方向 uk上的噪声强度，这个量从ComputeNoiseEstimate返回
+    const T test_point = measurement / (T(1.0) + snr_factor);  // 退化阈值点​​：判断信号是否足够强于噪声的临界值，噪声大于这个值就表明发生了退化
 
     const bool any_nan = std::isnan(expected_noise) || std::isnan(stdev) || std::isnan(test_point);
 
     if (!any_nan) {
+      // normal_distribution<T>(expected_noise, stdev): 定义噪声的正态分布
+      // test_point: 计算该处的CDF值
       const T probability = boost::math::cdf(
           boost::math::normal_distribution<T>(expected_noise, stdev), test_point);
 
