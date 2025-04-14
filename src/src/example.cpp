@@ -4,6 +4,8 @@
 #include "data.h"
 #include "degeneracy.h"
 
+// 论文为：Probabilistic Degeneracy Detection for  Point-to-Plane Error Minimization
+
 // 计算Hessian矩阵，对应论文中的公式5
 Eigen::Matrix<double, 6, 6> ComputeHessian(const degeneracy::VectorVector3<double>& points, const degeneracy::VectorVector3<double>& normals, const std::vector<double>& weights) {
   const size_t nPoints = points.size();
@@ -62,10 +64,10 @@ int main() {
   std::cout << "For the eigenvectors of the Hessian: " << std::endl;
   std::cout << eigenvectors << std::endl;
 
-  // // The following exemplifies how to solve the system of equations using the probabilities
-  // // Dummy right hand side rhs = Jtb
-  // const Eigen::Matrix<double, 6, 1> rhs = Eigen::Matrix<double, 6, 1>::Zero(6, 1);
-  // const auto estimate = degeneracy::SolveWithSnrProbabilities(eigenvectors, eigenvalues, rhs, non_degeneracy_probabilities);
+  // The following exemplifies how to solve the system of equations using the probabilities
+  // Dummy right hand side rhs = Jtb  给了一个临时的-Jb，然后后面代入函数中计算出最终的优化量
+  const Eigen::Matrix<double, 6, 1> rhs = Eigen::Matrix<double, 6, 1>::Zero(6, 1);
+  const auto estimate = degeneracy::SolveWithSnrProbabilities(eigenvectors, eigenvalues, rhs, non_degeneracy_probabilities);
 
   return 0;
 }

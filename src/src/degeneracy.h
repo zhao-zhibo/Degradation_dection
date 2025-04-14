@@ -132,14 +132,17 @@ Eigen::Matrix<T, 6, 1> SolveWithSnrProbabilities(
     const Eigen::Matrix<T, 6, 1>& snr_probabilities) {
   typedef typename Eigen::Matrix<T, 6, 1> Vector6;
 
+  // Step 1: 初始化加权伪逆特征值向量
   Vector6 d_psinv = Vector6::Zero();
 
+  // Step 2: 遍历每个特征方向，计算加权伪逆
   for (size_t i = 0; i < 6; i++) {
-    const T eigenvalue = eigenvalues[i];
-    const T p = snr_probabilities[i];
-    d_psinv[i] = p / eigenvalue;
+    const T eigenvalue = eigenvalues[i]; // Hessian 的特征值 λ_k
+    const T p = snr_probabilities[i]; // 方向 u_k 的非退化概率 p_k
+    d_psinv[i] = p / eigenvalue; // λ_k^+ = p_k / λ_k
   }
 
+  // Step 3: 对应论文中的公式24,计算估计的小量
   Vector6 perturbation = U * d_psinv.asDiagonal() * U.transpose() * rhs;
 
   return perturbation;
